@@ -23,7 +23,7 @@ type DefaultConfigurationType = {
 }
 
 export const DEFAULT_CONFIGURATION: DefaultConfigurationType = {
-  baseUrl: astroConfig.site || 'https://getcvfolio.com',
+  baseUrl: astroConfig.site || 'https://rosalesi.github.io',
   author: {
     avatar,
     name: 'Ivan Rosales',

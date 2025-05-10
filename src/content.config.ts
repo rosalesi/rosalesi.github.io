@@ -48,27 +48,6 @@ const jobCollection = defineCollection({
   }),
 });
 
-const talkCollection = defineCollection({
-  loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/content/talks' }),
-  schema: z.object({
-    title: z.string(),
-    year: z.number(),
-    event: z.string(),
-    location: z.string(),
-    url: z.string(),
-  }),
-});
-
-const postCollection = defineCollection({
-  loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/content/posts' }),
-  schema: ({ image }) => z.object({
-    title: z.string(),
-    date: z.date(),
-    image: image().optional(),
-    seo: seoSchema(image),
-  }),
-});
-
 const researchCollection = defineCollection({
   loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/content/researches' }),
   schema: z.object({
@@ -94,8 +73,6 @@ export const collections = {
   pages: pageCollection,
   links: linkCollection,
   jobs: jobCollection,
-  talks: talkCollection,
-  posts: postCollection,
   researches: researchCollection,
   projects: projectCollection,
 };
