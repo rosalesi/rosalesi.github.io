@@ -43,7 +43,7 @@ const jobCollection = defineCollection({
     company: z.string(),
     location: z.string(),
     from: z.number(),
-    to: z.number().or(z.enum(['Now'])),
+    to: z.number(),
     url: z.string(),
   }),
 });
@@ -69,10 +69,33 @@ const postCollection = defineCollection({
   }),
 });
 
+const researchCollection = defineCollection({
+  loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/content/researches' }),
+  schema: z.object({
+    title: z.string(),
+    lab: z.string(),
+    location: z.string(),
+    from: z.number(),
+    to: z.number(),
+    url: z.string(),
+  }),
+});
+
+const projectCollection = defineCollection({
+  loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/content/projects' }),
+  schema: z.object({
+    title: z.string(),
+    year: z.number(),
+    url: z.string(),
+  }),
+});
+
 export const collections = {
   pages: pageCollection,
   links: linkCollection,
   jobs: jobCollection,
   talks: talkCollection,
   posts: postCollection,
+  researches: researchCollection,
+  projects: projectCollection,
 };
