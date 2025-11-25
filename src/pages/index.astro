@@ -6,6 +6,7 @@ import Author from '@/components/ui/Author.astro';
 import { DEFAULT_CONFIGURATION } from '@/lib/constants';
 import WorkExperience from '@/components/ui/WorkExperience.astro';
 import ResearchExperience from '@/components/ui/ResearchExperience.astro';
+import TeachingExperience from '@/components/ui/TeachingExperience.astro';
 import Project from '@/components/ui/Project.astro';
 
 const entry = await getEntry('pages', 'homepage');
@@ -14,7 +15,7 @@ const { Content } = await render(entry);
 const links = await getCollection('links');
 const jobs = await getCollection('jobs');
 const researches = await getCollection('researches');
-const projects = await getCollection('projects');
+const teachings = await getCollection('teachings');
 ---
 
 <BaseLayout seo={entry?.data.seo}>
@@ -39,9 +40,21 @@ const projects = await getCollection('projects');
     <section class="py-6">
       <Container>
         <div class="flex flex-col gap-5">
-          <span class="text-headings">Work Experience</span>
+          <span class="text-headings">Work</span>
         <ul class="flex flex-col gap-8">
           {jobs.sort((a, b) => b.data.to - a.data.to).map((job) => <WorkExperience entry={job} />)}
+        </ul>
+      </div>
+      </Container>
+    </section>
+  )}
+  { teachings.length > 0 && (
+    <section class="py-6">
+      <Container>
+        <div class="flex flex-col gap-5">
+          <span class="text-headings">Teaching</span>
+        <ul class="flex flex-col gap-8">
+          {teachings.sort((a, b) => b.data.to - a.data.to).map((teaching) => <TeachingExperience entry={teaching} />)}
         </ul>
       </div>
       </Container>
@@ -54,18 +67,6 @@ const projects = await getCollection('projects');
           <span class="text-headings">Research</span>
         <ul class="flex flex-col gap-8">
           {researches.sort((a, b) => b.data.to - a.data.to).map((research) => <ResearchExperience entry={research} />)}
-        </ul>
-      </div>
-      </Container>
-    </section>
-  )}
-  { projects.length > 0 && (
-    <section class="py-6">
-      <Container>
-        <div class="flex flex-col gap-5">
-          <span class="text-headings">Projects</span>
-        <ul class="flex flex-col gap-8">
-          {projects.sort((a, b) => b.data.year - a.data.year).map((project) => <Project entry={project} />)}
         </ul>
       </div>
       </Container>

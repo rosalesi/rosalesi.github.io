@@ -60,6 +60,18 @@ const researchCollection = defineCollection({
   }),
 });
 
+const teachingCollection = defineCollection({
+  loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/content/teachings' }),
+  schema: z.object({
+    title: z.string(),
+    institution: z.string(),
+    location: z.string(),
+    from: z.number(),
+    to: z.number(),
+    url: z.string(),
+  }),
+});
+
 const projectCollection = defineCollection({
   loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/content/projects' }),
   schema: z.object({
@@ -74,5 +86,6 @@ export const collections = {
   links: linkCollection,
   jobs: jobCollection,
   researches: researchCollection,
+  teachings: teachingCollection,
   projects: projectCollection,
 };

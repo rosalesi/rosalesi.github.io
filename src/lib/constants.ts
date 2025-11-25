@@ -27,7 +27,7 @@ export const DEFAULT_CONFIGURATION: DefaultConfigurationType = {
   author: {
     avatar,
     name: 'Ivan Rosales',
-    headline: 'CS & Math',
+    headline: 'MSCS',
     location: 'Duke',
     pronouns: 'He/Him',
   },
