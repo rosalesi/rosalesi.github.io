@@ -81,6 +81,17 @@ const projectCollection = defineCollection({
   }),
 });
 
+const postCollection = defineCollection({
+  loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/content/posts' }),
+  schema: ({ image }) =>
+    z.object({
+      title: z.string(),
+      date: z.date(),
+      image: image().optional(),
+      seo: seoSchema(image),
+    }),
+});
+
 export const collections = {
   pages: pageCollection,
   links: linkCollection,
@@ -88,4 +99,5 @@ export const collections = {
   researches: researchCollection,
   teachings: teachingCollection,
   projects: projectCollection,
+  posts: postCollection,
 };
