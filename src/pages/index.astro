@@ -7,13 +7,19 @@ import { DEFAULT_CONFIGURATION } from '@/lib/constants';
 import WorkExperience from '@/components/ui/WorkExperience.astro';
 import ResearchExperience from '@/components/ui/ResearchExperience.astro';
 import TeachingExperience from '@/components/ui/TeachingExperience.astro';
-import Project from '@/components/ui/Project.astro';
+import ExperienceTabs from '@/components/ui/ExperienceTabs.astro';
 
 const entry = await getEntry('pages', 'homepage');
 
 const jobs = await getCollection('jobs');
 const researches = await getCollection('researches');
 const teachings = await getCollection('teachings');
+
+const experienceTabs = [
+  ...(jobs.length > 0 ? [{ id: 'work' as const, label: 'Work' }] : []),
+  ...(teachings.length > 0 ? [{ id: 'teaching' as const, label: 'Teaching' }] : []),
+  ...(researches.length > 0 ? [{ id: 'research' as const, label: 'Research' }] : []),
+];
 ---
 
 <BaseLayout seo={entry?.data.seo}>
@@ -22,39 +28,26 @@ const teachings = await getCollection('teachings');
       <Author {...DEFAULT_CONFIGURATION.author} />
     </Container>
   </section>
-  { jobs.length > 0 && (
+  {experienceTabs.length > 0 && (
     <section class="py-6">
       <Container>
-        <div class="flex flex-col gap-5">
-          <span class="text-headings">Work</span>
-        <ul class="flex flex-col gap-8">
-          {jobs.sort((a, b) => b.data.to - a.data.to).map((job) => <WorkExperience entry={job} />)}
-        </ul>
-      </div>
-      </Container>
-    </section>
-  )}
-  { teachings.length > 0 && (
-    <section class="py-6">
-      <Container>
-        <div class="flex flex-col gap-5">
-          <span class="text-headings">Teaching</span>
-        <ul class="flex flex-col gap-8">
-          {teachings.sort((a, b) => b.data.to - a.data.to).map((teaching) => <TeachingExperience entry={teaching} />)}
-        </ul>
-      </div>
-      </Container>
-    </section>
-  )}
-  { researches.length > 0 && (
-    <section class="py-6">
-      <Container>
-        <div class="flex flex-col gap-5">
-          <span class="text-headings">Research</span>
-        <ul class="flex flex-col gap-8">
-          {researches.sort((a, b) => b.data.to - a.data.to).map((research) => <ResearchExperience entry={research} />)}
-        </ul>
-      </div>
+        <ExperienceTabs tabs={experienceTabs}>
+          {jobs.length > 0 && (
+            <ul slot="work" class="flex flex-col gap-8">
+              {jobs.sort((a, b) => b.data.to - a.data.to).map((job) => <WorkExperience entry={job} />)}
+            </ul>
+          )}
+          {teachings.length > 0 && (
+            <ul slot="teaching" class="flex flex-col gap-8">
+              {teachings.sort((a, b) => b.data.to - a.data.to).map((teaching) => <TeachingExperience entry={teaching} />)}
+            </ul>
+          )}
+          {researches.length > 0 && (
+            <ul slot="research" class="flex flex-col gap-8">
+              {researches.sort((a, b) => b.data.to - a.data.to).map((research) => <ResearchExperience entry={research} />)}
+            </ul>
+          )}
+        </ExperienceTabs>
       </Container>
     </section>
   )}
