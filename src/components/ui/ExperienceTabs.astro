@@ -1,0 +1,109 @@
+---
+interface Tab {
+  id: 'work' | 'teaching' | 'research' | 'writing';
+  label: string;
+}
+
+interface Props {
+  tabs: Tab[];
+}
+
+const { tabs } = Astro.props;
+const tabIds = new Set(tabs.map((tab) => tab.id));
+const defaultTab = tabs[0]?.id;
+---
+
+<div class="flex flex-col gap-5" data-experience-tabs>
+  <div role="tablist" aria-label="Experience" class="flex items-center gap-4">
+    {tabs.map((tab) => (
+      <button
+        type="button"
+        role="tab"
+        id={`tab-${tab.id}`}
+        aria-controls={`panel-${tab.id}`}
+        aria-selected={tab.id === defaultTab ? 'true' : 'false'}
+        data-tab={tab.id}
+        class:list={[
+          'text-sm transition-colors cursor-pointer',
+          'hover:text-headings',
+          tab.id === defaultTab ? 'text-headings font-medium' : 'text-muted-foreground',
+        ]}
+      >
+        {tab.label}
+      </button>
+    ))}
+  </div>
+
+  {tabIds.has('work') && (
+    <div
+      role="tabpanel"
+      id="panel-work"
+      aria-labelledby="tab-work"
+      hidden={defaultTab !== 'work' ? true : undefined}
+      data-panel="work"
+    >
+      <slot name="work" />
+    </div>
+  )}
+
+  {tabIds.has('teaching') && (
+    <div
+      role="tabpanel"
+      id="panel-teaching"
+      aria-labelledby="tab-teaching"
+      hidden={defaultTab !== 'teaching' ? true : undefined}
+      data-panel="teaching"
+    >
+      <slot name="teaching" />
+    </div>
+  )}
+
+  {tabIds.has('research') && (
+    <div
+      role="tabpanel"
+      id="panel-research"
+      aria-labelledby="tab-research"
+      hidden={defaultTab !== 'research' ? true : undefined}
+      data-panel="research"
+    >
+      <slot name="research" />
+    </div>
+  )}
+
+  {tabIds.has('writing') && (
+    <div
+      role="tabpanel"
+      id="panel-writing"
+      aria-labelledby="tab-writing"
+      hidden={defaultTab !== 'writing' ? true : undefined}
+      data-panel="writing"
+    >
+      <slot name="writing" />
+    </div>
+  )}
+</div>
+
+<script>
+  document.querySelectorAll('[data-experience-tabs]').forEach((root) => {
+    const tabs = root.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    const panels = root.querySelectorAll<HTMLElement>('[role="tabpanel"]');
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const id = tab.dataset.tab;
+
+        tabs.forEach((button) => {
+          const isSelected = button.dataset.tab === id;
+          button.setAttribute('aria-selected', String(isSelected));
+          button.classList.toggle('text-headings', isSelected);
+          button.classList.toggle('font-medium', isSelected);
+          button.classList.toggle('text-muted-foreground', !isSelected);
+        });
+
+        panels.forEach((panel) => {
+          panel.hidden = panel.dataset.panel !== id;
+        });
+      });
+    });
+  });
+</script>
