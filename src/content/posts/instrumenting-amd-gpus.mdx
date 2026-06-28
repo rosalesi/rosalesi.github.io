@@ -1,0 +1,34 @@
+---
+title: Instrumenting AMD GPUs for Research
+description: How we traced kernel launches and memory transfers to understand GPU behavior in the NUCAR lab.
+date: 2024-11-12
+draft: true
+category: research
+seo:
+  title: Instrumenting AMD GPUs for Research
+  description: How we traced kernel launches and memory transfers to understand GPU behavior in the NUCAR lab.
+---
+
+Most GPU profiling tools assume you are optimizing a single application you control end to end. In research settings, the interesting question is often what a third-party stack is doing on the hardware — and that requires a different approach to instrumentation.
+
+We started with a simple goal: observe when kernels launch, how long they run, and which memory regions they touch. The naive solution is to wrap every API call. That works until you realize how many paths exist into the driver, and how much overhead wrapping adds at scale.
+
+## Building a lightweight trace
+
+Our first iteration hooked a small set of runtime entry points and recorded timestamps into a ring buffer. The buffer flushed asynchronously so we could avoid stalling the GPU pipeline during capture.
+
+The hard part was not collection — it was attribution. A kernel name from the driver is often a mangled symbol or an anonymous compile unit. We paired each launch event with the nearest host-side stack frame when symbols were available, and fell back to address ranges otherwise.
+
+## What we learned
+
+Three patterns showed up repeatedly in our traces:
+
+1. **Launch clustering** — workloads batch small kernels instead of fusing them, leaving the device underutilized between waves.
+2. **Host-side bubbles** — long gaps between launches often came from synchronization on the CPU, not from GPU occupancy limits.
+3. **Memory phase shifts** — the same model could flip from compute-bound to bandwidth-bound depending on batch size alone.
+
+These are obvious in hindsight, but they were invisible until we had continuous traces rather than aggregate counters.
+
+## Next steps
+
+We are extending the same instrumentation path to capture queue-level dependencies and to export traces in a format that plays nicely with existing visualization tools. The broader lesson: if you want to reason about performance on hardware you do not own, invest early in observability that is cheap enough to leave on.

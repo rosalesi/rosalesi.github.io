@@ -1,0 +1,167 @@
+---
+title: RL'ing Balatro
+description: Sim + PPO + Friends = ?
+date: 2025-05-15
+authors:
+  - Ivan
+  - Ethan
+  - Ajay
+  - Anjy
+category: research
+seo:
+  title: RL'ing Balatro
+  description: Sim + PPO + Friends = ?
+---
+
+For our reinforcement learning class at Duke, we spent a few months trying to get an
+agent to play [Balatro](https://en.wikipedia.org/wiki/Balatro). I had recently watched The Thinking game
+and was convinced (still am) that I'm just like Demis. This is a writeup about what we built and learned along the way.
+
+## Building a simulator
+
+Most previous attempts trained on the actual game through existing mods. That was
+painfully slow for the number of rollouts we wanted. So we wrote our own simulator in
+Rust and hooked it up to Python. The training side is a normal gym-style reset and step.
+The agent gets a 759-dimensional observation vector and a mask over 135 discrete actions
+each turn.
+
+The scope for now is the red deck on white stake. The goal is to beat the ante 8 showdown
+blind. Here's what we actually built in `balatro-core`:
+
+- The real Balatro RNG. Keyed streams, Tausworthe 223, the same pseudohash and pseudoshuffle
+  logic as the Lua game. Give it a real seed string and you get the same boss blinds, dealt
+  hands, shop contents, and tags as Steam.
+- The full scoring pipeline. All 150 jokers, poker hand detection, chips times mult,
+  recursive triggers, held-in-hand bonuses.
+- 135 actions with select-and-commit. You toggle cards, then play or discard. The shop has
+  buy, sell, reroll, pack select, blind select, joker reordering, even adjacent hand swaps.
+  We did not enumerate every possible card subset as its own action.
+
+The observation is a flat vector of the whole game state. Your hand, the full deck with
+where each card lives, jokers, consumables, shop slots, voucher flags, chip targets, and
+a couple idol forecast scalars at the end. It's a lot, but it's all there.
+
+Verification ended up mattering as much as the sim itself. Maybe more. If the
+simulator drifts from the live client, then the agent will learn garbage.
+
+We started by compiling to WASM and running the same actions side by side in a browser tool
+and the real game. That caught obvious bugs but it didn't scale. The web app we use now
+talks to the Rust sim over HTTP instead. Same idea, just not in the browser anymore.
+
+![The original Balatro game on the left and our web app on the right.](/images/posts/learning-balatro-with-rl/game-vs-webapp.png)
+
+*Figure 1: The real game on the left, our web app on the right.*
+
+Then we hooked into BalatroBot. You step through a run in the sim, replay the same actions
+in the live client, and compare state.
+
+We also built a verification system in the cloud around this. When something diverges we
+save the full trace to Google Drive and log it in a sheet. That means a trace id, the seed,
+the step count, and every action up to the mismatch. We can replay a bug later with
+`replay-by-id` and get the exact same sequence. The screenshot below is our fix list. Stuff
+like Chaos Joker reroll pricing being wrong, or Four Fingers scoring differently than the
+real game. A lot of these look fine on screen and only show up when you diff the actual
+state.
+
+![Fix list from our cloud verification system showing saved traces and bug reproduction details.](/images/posts/learning-balatro-with-rl/verification-fixlist.png)
+
+*Figure 2: Our fix list. Each row is a saved trace we could replay to reproduce a bug.*
+
+The next step is to fuzz properly. The idea is to take a decent trained policy, let it
+play long rollouts in the sim, mirror those same trajectories in the real game, and diff
+the states automatically. Manual clicking got us here. A policy that actually explores
+the game should hit the weird joker interactions we haven't found yet.
+
+## Rewards
+
+The core reward lives in Rust and it's pretty bare. Almost everything is zero. You get +1
+for clearing a blind. If you play a hand and still have hands left, you get chips scored
+divided by the blind target, capped at 1. If you run out of hands without clearing, the
+episode ends at -1. Shop moves, discards, rerolls are all zero.
+
+All the interesting shaping lives in Python on top. We have a dense reward scheme with
+separate knobs per agent. The blind agent gets nudges for hand type quality, discard credit,
+urgency when you're low on hands, and a softer penalty for dying late in a run. The shop
+agent gets penalized for crossing interest tier boundaries and rewarded for picking up
+jokers. When a blind clears, the shop agent gets credit for the cash and the round win.
+When you win a run, both agents get the bonus. We could turn any of this off without
+touching Rust.
+
+## Two agents instead of one
+
+We tried a single agent first. It kept getting stuck in one of two modes. Either it would
+play hands too aggressively and ignore the economy, or it would hoard money and never buy
+jokers. Same network, two totally different skills.
+
+Blind play is short. You see a hand, pick cards, commit. Shop play feels different. You're
+spending money and thinking about synergies and planning ahead. So we split it into two
+RLlib policies, `blind_agent` and `shop_agent`. Rust projects the game state into a
+different observation for each one. The blind agent acts during hand selection. The shop
+agent acts in the shop, during pack opening, and even at blind select. Cash out
+auto-advances without an agent step.
+
+The single-agent baseline with the same setup couldn't reliably get past the first blind.
+
+![Multi-agent architecture with shared card encoder and separate blind and shop policies.](/images/posts/learning-balatro-with-rl/architecture.png)
+
+*Figure 3: Shared card encoder, separate blind and shop heads.*
+
+I'm not going to dump the full architecture here. The blind policy doesn't pick from 135
+actions directly. It uses an autoregressive head that picks play or discard, then toggles
+cards one at a time until it commits. We called it choose-or-stop. A flat softmax over
+every combination was unstable.
+
+The shop policy uses a shared card encoder over every item on the board. Shop slots,
+jokers, pack contents, hand cards. Each token gets a tag for buy, sell, use, or move.
+To buy something specific we do a dot product between an intent vector and that card's
+embedding. Reroll, end shop, and skip blind got their own heads. We tried treating those
+like regular shop items and it didn't work.
+
+The shop entropy had to decay over training. Otherwise it would reroll forever or leave
+the shop immediately within a few hundred iterations.
+
+We trained both agents jointly with Ray RLlib multi-agent PPO. We batched hundreds of
+games stepping in parallel through the Rust vec env. Our main local run used four env
+runners on an RTX A5000, about 20.5M environment steps over 4,000 PPO iterations. On the
+cluster we pushed it to 32 runners with 32 envs each.
+
+## What the curves look like
+
+![Five training metrics over the first 1,000 PPO iterations.](/images/posts/learning-balatro-with-rl/training-curves.png)
+
+*Figure 4: Return, first-blind clear rate, episode length, money, and max ante.
+Smoothed with a 40-iteration rolling mean.*
+
+For the first ~150 iterations the agent basically dies at the first blind. The return
+was near zero. Episodes were short. Money stayed at $4.
+
+Then around iteration 150 everything shifts at once. The first-blind clear rate goes from
+near zero to ~99% within about twenty iterations. The return jumps. Episodes get a lot
+longer because you're actually reaching the shop with money. The mean max ante climbs
+toward 2 and then plateaus around 2.6 to 3.
+
+We're not winning runs. A full run is eight antes and we top out around ante 3 on
+average. The variance after that is mostly shop RNG and different joker paths. The blind
+policy isn't really getting better at that point. We only plotted the first 1,000 of
+4,000 iterations because that's where the interesting part is.
+
+## Takeaways
+
+This was hard. Beating Balatro with RL still feels like an open problem to me, and we
+didn't crack it. We got somewhere. Clearing the first blind reliably was a real milestone,
+but nowhere close to a winning run. That's fine. The class project was never going to be
+the final answer.
+
+Still, it was a blast. Ethan, Ajay, Anjaney, and I spent months on this together, and our
+professor liked the project enough that it felt like a real win at the end of the day. W
+team.
+
+Ethan and I haven't dropped it. The part that still feels unsolved is hand play, not the
+shop or the economy, but actually knowing when to fish for a better hand instead of
+taking what's in front of you. We're working on that now: teaching the agent to win by
+chasing stronger poker hands, flushes and straights especially, rather than playing the
+first decent thing it sees. It's the same problem in a different form, and we're still
+early.
+
+I'll probably write another piece about that when we have something worth showing. For now
+this is where the class project landed.
