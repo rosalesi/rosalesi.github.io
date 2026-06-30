@@ -1,0 +1,35 @@
+---
+title: What I Learned Teaching Object-Oriented Design
+description: Reflections on helping undergraduates move from syntax to design — and why the hardest bugs are structural, not syntactic.
+date: 2024-12-03
+draft: true
+category: ideas
+seo:
+  title: What I Learned Teaching Object-Oriented Design
+  description: Reflections on helping undergraduates move from syntax to design — and why the hardest bugs are structural, not syntactic.
+---
+
+Teaching Object-Oriented Design as an undergraduate TA forced me to explain ideas I had mostly absorbed by osmosis. The course was not really about Java syntax — students already knew loops and classes. The challenge was helping them see *design* as a set of tradeoffs you can defend.
+
+Office hours followed a predictable arc. A student would arrive with a program that worked on the sample inputs and failed on the hidden tests. Nine times out of ten, the bug was not a missing semicolon. It was a responsibility placed in the wrong class, or state shared in a way that made invariants impossible to maintain.
+
+## The questions that helped
+
+Two questions unlocked more progress than any lecture slide:
+
+- **Who should know this information?** If three classes all read the same field, something is misplaced.
+- **What must always be true?** If you cannot state an invariant in one sentence, your abstractions are probably doing too much.
+
+Once students could answer those questions out loud, their refactors got smaller and their tests got clearer.
+
+## Assignments as design exercises
+
+The most successful labs treated each assignment as a miniature system with explicit constraints: a fixed public API, a performance budget, or a requirement to swap implementations without changing callers.
+
+That framing made patterns feel less like vocabulary words and more like tools. Singleton was not “a fancy global variable.” It was a deliberate choice about where configuration lives — and usually the wrong one for the assignments we gave.
+
+## What I would do differently
+
+I would spend more time on reading code written by someone else. Students improved fastest when they had to modify an existing codebase with imperfect boundaries. Greenfield projects let them paper over design mistakes with clever constructors.
+
+Teaching did not make me an expert in object-oriented design. It made me slower to reach for inheritance and faster to ask whether two concepts actually change for the same reason.

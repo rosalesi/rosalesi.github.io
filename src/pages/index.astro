@@ -8,17 +8,21 @@ import WorkExperience from '@/components/ui/WorkExperience.astro';
 import ResearchExperience from '@/components/ui/ResearchExperience.astro';
 import TeachingExperience from '@/components/ui/TeachingExperience.astro';
 import ExperienceTabs from '@/components/ui/ExperienceTabs.astro';
+import WritingPreview from '@/components/ui/WritingPreview.astro';
+import { getPublishedPosts } from '@/lib/posts';
 
 const entry = await getEntry('pages', 'homepage');
 
 const jobs = await getCollection('jobs');
 const researches = await getCollection('researches');
 const teachings = await getCollection('teachings');
+const posts = await getPublishedPosts();
 
 const experienceTabs = [
   ...(jobs.length > 0 ? [{ id: 'work' as const, label: 'Work' }] : []),
   ...(teachings.length > 0 ? [{ id: 'teaching' as const, label: 'Teaching' }] : []),
   ...(researches.length > 0 ? [{ id: 'research' as const, label: 'Research' }] : []),
+  ...(posts.length > 0 ? [{ id: 'writing' as const, label: 'Writing' }] : []),
 ];
 ---
 
@@ -45,6 +49,11 @@ const experienceTabs = [
           {researches.length > 0 && (
             <ul slot="research" class="flex flex-col gap-8">
               {researches.sort((a, b) => b.data.to - a.data.to).map((research) => <ResearchExperience entry={research} />)}
+            </ul>
+          )}
+          {posts.length > 0 && (
+            <ul slot="writing" class="flex flex-col">
+              {posts.map((post) => <WritingPreview entry={post} />)}
             </ul>
           )}
         </ExperienceTabs>

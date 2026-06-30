@@ -1,0 +1,38 @@
+---
+title: Building a Compiler from Scratch
+description: Notes from implementing lexing, parsing, and code generation for a small language — and why the pipeline matters more than any single pass.
+date: 2025-02-18
+draft: true
+category: product
+seo:
+  title: Building a Compiler from Scratch
+  description: Notes from implementing lexing, parsing, and code generation for a small language — and why the pipeline matters more than any single pass.
+---
+
+I built a compiler for a small imperative language as a semester project. The language was deliberately boring: integers, booleans, functions, and a handful of statements. That constraint kept the interesting problems in the pipeline rather than in feature creep.
+
+The goal was not to compete with LLVM. It was to understand what each stage is responsible for, and where errors should be caught.
+
+## Lexing and parsing
+
+The lexer was table-driven and unremarkable. The parser was recursive descent, which made error messages easier to reason about than a generated LR table I would have spent weeks debugging.
+
+The first milestone was not “compile hello world.” It was “pretty-print the AST back to source and get the same program.” That round-trip test caught an embarrassing number of associativity bugs before we ever touched code generation.
+
+## Semantic analysis
+
+Type checking happened in a single pass over the AST with a symbol table stack. I resisted the urge to merge it with parsing. Keeping analysis separate meant the parser could stay dumb and the type checker could report errors with stable locations.
+
+Generics were out of scope. So were closures. Those omissions were features: they kept the symbol table implementation small enough to rewrite when we got it wrong the first time.
+
+## Code generation
+
+We targeted a stack machine with explicit locals and a simple calling convention. Register allocation was “use the stack for everything,” which is slow but excellent for learning.
+
+The surprising work was not instruction selection. It was calling conventions: who cleans up the stack, where return values live, and how to lower short-circuit boolean expressions without branching twice as often as necessary.
+
+## What stuck
+
+Compilers are pipelines. Each stage should consume a well-defined artifact and produce another one. When something breaks, you want to know which stage lied — not which 400-line function needs another special case.
+
+I still reach for that mindset outside of compilers: narrow interfaces between phases, tests at boundaries, and skepticism toward passes that do two jobs at once.

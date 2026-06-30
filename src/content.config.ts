@@ -86,7 +86,11 @@ const postCollection = defineCollection({
   schema: ({ image }) =>
     z.object({
       title: z.string(),
+      description: z.string(),
       date: z.date(),
+      authors: z.array(z.string()).optional(),
+      draft: z.boolean().optional(),
+      category: z.string().optional(),
       image: image().optional(),
       seo: seoSchema(image),
     }),

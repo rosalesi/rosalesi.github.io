@@ -13,10 +13,3 @@ export const formatDate = (date: Date) => {
 }
 
 export const generateAbsoluteUrl = (path: string) => DEFAULT_CONFIGURATION.baseUrl.concat(path);
-
-export const isDevelopment = () => import.meta.env.MODE === 'development';
-
-export const includeDraft = (draft: boolean) => {
-  if (isDevelopment()) return true;
-  return draft !== true;
-};
