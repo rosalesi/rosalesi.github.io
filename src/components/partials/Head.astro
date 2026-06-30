@@ -9,6 +9,7 @@ interface Props {
 }
 
 const defaultSeo = DEFAULT_CONFIGURATION.seo;
+const siteName = DEFAULT_CONFIGURATION.author.name;
 const { seo } = Astro.props;
 
 const image = await getImage({ src: seo?.image || defaultSeo.image, format: 'jpg'});
@@ -29,7 +30,7 @@ const seoImage = generateAbsoluteUrl(image.src);
   <meta name="robots" content={seo?.robots || defaultSeo.robots} />
   <!-- OpenGraph Meta -->
   <meta property="og:type" content={seo?.type ?? 'website'} />
-  <meta property="og:site_name" content={defaultSeo.title} />
+  <meta property="og:site_name" content={siteName} />
   <meta property="og:title" content={seo?.title || defaultSeo.title} />
   <meta property="og:description" content={seo?.description || defaultSeo.description} />
   <meta property="og:image" content={seoImage} />

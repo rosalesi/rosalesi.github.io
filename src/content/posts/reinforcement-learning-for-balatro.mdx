@@ -1,5 +1,5 @@
 ---
-title: RL'ing Balatro
+title: Reinforcement Learning for Balatro
 description: Sim + PPO + Friends = ?
 date: 2025-05-15
 authors:
@@ -8,8 +8,9 @@ authors:
   - Ajay
   - Anjy
 category: research
+image: ./reinforcement-learning-for-balatro-cover.png
 seo:
-  title: RL'ing Balatro
+  title: Reinforcement Learning for Balatro
   description: Sim + PPO + Friends = ?
 ---
 
@@ -25,23 +26,23 @@ Note that this was our first attempt at designing the spaces. We've since made b
 
 The observation space is a flat vector which we packed as much game state info into as we could. Some of the info includes the card information for the entire deck, jokers, consumables, shop, vouchers, chip targets, ante boss, money, etc.
 
-![V1 observation space mapping (1449 dimensions).](/images/posts/learning-balatro-with-rl/observation-space.png)
+![V1 observation space mapping (1449 dimensions).](/images/posts/reinforcement-learning-for-balatro/observation-space.png)
 
 The action space included card selection, play, discard, shop buying, using consumables, joker reordering, hand reordering, and more.
 
-![V1 action space mapping (74 discrete actions).](/images/posts/learning-balatro-with-rl/action-space.png)
+![V1 action space mapping (74 discrete actions).](/images/posts/reinforcement-learning-for-balatro/action-space.png)
 
 We implemented every feature from true Balatro. This includes poker hand detection, chip scoring, Joker scoring, recursive triggers, money system, boss de-buffs, and more. However, the most important feature we implemented is the RNG system. Balatro is filled with random event streams which each have their own RNG key. Examples of streams are deck order, shop contents, pack contents, vouchers, bosses, and more. Balatro's game engine, [LÖVE](https://love2d.org/), is Lua based. Through investigation, we found that the LuaJIT complier uses Tausworthe 223 for random number generation. This discovery allowed us to fully replicate the RNG system, enabling us to check-expect our sim's runs against true Balatro.
 
 The verification system built ended up being more important than the logic of the sim itself.  If a run on our sim drifts from a true Balatro run, then the agent will learn nothing. So, closing the sim to real gap was P0.  TLDR; We made a web app for our sim so we could manually play it. The rest of the system mirrors our actions on the sim web app to true Balatro via mods.
 
-![The original Balatro game on the left and our web app on the right.](/images/posts/learning-balatro-with-rl/game-vs-webapp.png)
+![The original Balatro game on the left and our web app on the right.](/images/posts/reinforcement-learning-for-balatro/game-vs-webapp.png)
 
 *Figure 1: The real game on the left, our web app on the right.*
 
 This was a great start but sharing bug traces between team members was challenging. So, we built a cloud system! When one of us encounters a divergence mid-run, our system lets us push the full run trace to Google Drive and manage the status of the bug. For each divergence, we stored a trace id, seed, and every action up to the mismatch. Then we added some quality of life feature which let us automatically replay traces. The screenshot below is a peek into the Google Drive system.
 
-![Fix list from our cloud verification system showing saved traces and bug reproduction details.](/images/posts/learning-balatro-with-rl/verification-fixlist.png)
+![Fix list from our cloud verification system showing saved traces and bug reproduction details.](/images/posts/reinforcement-learning-for-balatro/verification-fixlist.png)
 
 *Figure 2: Our fix list. Each row is a saved trace we could replay to reproduce a bug.*
 
@@ -63,7 +64,7 @@ Note that we had single-policy and multi-policy attempts for this work. The rewa
 
 Our thesis for trying multi-agent was that blind play and shop play were different enough to justify their own models. Shop play is much simpler in action space but requires much deeper thought and long term planning. Blind play requires the mechanics of chaining strong poker hands with jokers. On top of that, there was a bunch of model architecture we wanted to try out which benefited from a decoupling. So, we split it into two RLlib policies, `blind_agent` and `shop_agent`. Rust projects the game state into a different observation for each one. The blind agent acts during hand selection. The shop agent acts in the shop, pack openings, and blind select. The image below is a diagram of the agents.
 
-![Multi-agent architecture with shared card encoder and separate blind and shop policies.](/images/posts/learning-balatro-with-rl/architecture.png)
+![Multi-agent architecture with shared card encoder and separate blind and shop policies.](/images/posts/reinforcement-learning-for-balatro/architecture.png)
 
 *Figure 3: Shared card encoder, separate blind and shop heads.*
 
@@ -80,7 +81,7 @@ runners on an RTX A5000, about 20.5M environment steps over 4,000 PPO iterations
 
 ## Charts
 
-![Five training metrics over the first 1,000 PPO iterations.](/images/posts/learning-balatro-with-rl/training-curves.png)
+![Five training metrics over the first 1,000 PPO iterations.](/images/posts/reinforcement-learning-for-balatro/training-curves.png)
 
 *Figure 4: Return, first-blind clear rate, episode length, money, and max ante.
 Smoothed with a 40-iteration rolling mean.*
