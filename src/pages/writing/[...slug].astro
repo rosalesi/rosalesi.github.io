@@ -18,9 +18,13 @@ export async function getStaticPaths() {
 const { entry } = Astro.props;
 const { Content, remarkPluginFrontmatter } = await render(entry);
 const authors = formatPostAuthors(entry.data.authors);
+const seo = {
+  ...entry.data.seo,
+  ...(entry.data.image && !entry.data.seo.image ? { image: entry.data.image } : {}),
+};
 ---
 
-<BaseLayout seo={entry.data.seo}>
+<BaseLayout seo={seo}>
   <section class="py-6">
     <Container>
       <article class="flex flex-col">
