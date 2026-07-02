@@ -1,0 +1,107 @@
+---
+title: Async Logging for xv6
+description: An async logging service for xv6 using shared memory and a background daemon.
+date: 2025-11-25
+authors:
+  - Ivan
+  - Jianjun
+  - Jiaqi
+  - Dongping
+category: research
+seo:
+  title: Async Logging for xv6
+  description: An async logging service for xv6 using shared memory and a background daemon.
+---
+
+As part of our Operating Systems final project, Jianjun, Jiaqi, Dongping and I built an async logging service for [xv6](https://pdos.csail.mit.edu/6.828/2023/xv6/xv6-rev11.pdf) . The problem we focused on is log call blocks in xv6. With naiive printing for logs, every log blocks until the write actually lands on disk. For a performant system, this is unacceptable. The acceptable logging interface is one that writes your log to memory, returns immediately, and lets another process deal with disk in the background. This writeup covers our design and implementation for said system.
+
+## Architecture
+
+Our design's main idea is to keep the write operation off of our applications execution path. So, we split the system into four pieces that hand work down a chain.
+
+![User apps write to a shared ring buffer and a daemon batches writes to disk.](/images/posts/async-logger-for-xv6/architecture.png)
+
+*Figure 1. Apps write into shared memory and the daemon drains it to disk.*
+
+The first piece was a prerequisite, kernel support for shared memory so that unrelated processes could all see the same physical pages. On top of that sits a lock-free ring buffer that lives inside the shared memory. Applications talk to the shared ring buffer through a client library whose log call never blocks. Finally, a we built a daemon that actually reads the shared ring buffer and writes to disk in batches.
+
+Our entry point is the daemon which boots up and constructs the shared ring. From there, any application that needs async logging can attach to the shared memory, register the file it wants to write to, and start logging. The nice part is that from the application's POV, the entire API is three lines:
+
+```c
+register("myapp.log");
+log_info("worker started");
+log_error("something went wrong");
+```
+
+Under the hood a log call simply reserves a slot in the ring, copies the message in, and marks it ready to write. The application does not invoke system calls or any other blocking operation.
+
+## Shared Memory
+
+The prerequisite solves xv6's lack of inter-process communication. This problem blocked us from creating a shared data structure. So before tackling the shared data structure, we built a primitive piece that allowed processes to access joint physical pages. Specifically, we built a set of system calls to create, attach to, detach from, and destroy a shared segment.
+
+Internally, the kernel maintains a map of key-segment pairs. Each segment owns its page table holding the real physical pages. When a process attaches, the same physical frames get mapped to that process's address space above its heap. Different processes end up with unique virtual addresses that all resolve to the same physical memory.
+
+![Shared segment mapped at the process program break.](/images/posts/async-logger-for-xv6/shm-layout.png)
+
+*Figure 2. Shared segment mapped above the heap.*
+
+Forking was the trickiest part. Normally, xv6 copies a process's pages on fork and frees them on exit. This is the opposite of what we wanted for shared memory! We didn't want a child to get a private copy, and we definitely didn't want the first process to exit to free memory everyone else was still using. Luckily RISC-V page table entries have a bit reserved for software to do whatever it wants with, so we claimed it as a "shared" boolean flag.
+
+```c
+#define PTE_SHM (1L << 8)
+```
+
+The fork copy path skips any page marked shared. We also re-map the parent's segments into the child by hand instead. Unmapping clears the entry but leaves the shared flag alone so the physical frame doesn't get freed while other processes are still using it. Each process also tracks which segments it's holding so we can reference count properly and only actually reclaim a segment once the last user lets go.
+
+## Ring Buffer
+
+With shared memory working, the next step was building the shared ring buffer. The obvious design is a normal ring with a head and tail that both writers and readers touch. However, that fails with many writers racing in the system. So, we made the system ticket based instead. A writer desiring a slot will do an atomic compare-and-swap to bump the head counter. In a race, exactly one writer will win and own the block. The losers will simply keep trying until they win. There's no lock on the write path, which is critical in a system of processes all logging concurrently.
+
+The reservation logic is short and sweet:
+
+```c
+void* reserve_block() {
+  while (1) {
+    uint64 head = ring->head;
+    if (head - ring->tail >= ring->block_num)
+      return NULL;                       // ring is full
+
+    if (cas(&ring->head, head, head + 1)) // try to claim this ticket
+      return &ring->blocks[head % ring->block_num];
+  }
+}
+```
+
+Once a writer owns a block, it passes its message and flips a committed flag signaling it's ready for disk write. The daemon, who is traversing the ring, only considers blocks once their committed flag is set. Note that writers can finish out of order. A quick process might commit to block 3 before a slow one finishes block 2. We handle this case by having the reader refuse to advance past uncommitted slots. So even though writers race freely, the logs always comes out in the original ticket order.
+
+![Ring buffer with out-of-order commits on the producer side.](/images/posts/async-logger-for-xv6/ring-buffer.png)
+
+*Figure 3. Block 3 is ready but block 2 is still being written. The reader waits.*
+
+One deliberate decision here is what happens when the ring fills up. We don't block and we don't retry. We just drop the log line and move on. It sounds harsh but our goal is to never stall the application. So in our eyes, dropping a line is a much better failure than halting the program.
+
+## The Daemon
+
+The daemon is the consumer. Its implementation is a little more involved than that of the writer because it actually has to write to disk. It's a process that spins on the ring continuously pulling messages. Then, it parents a couple of forked children that block for disk writes.
+
+![Daemon dispatch loop and I/O worker pool.](/images/posts/async-logger-for-xv6/daemon.png)
+
+*Figure 4. Main thread routes to per-client buffers and workers write to disk.*
+
+The main loop simply pulls a message, resolves its owner, and drops it into the in-memory buffer. When the buffer fills up and/or enough time passes, one of the worker processes writes out the entire buffer. This batching mechanic is the whole reason this system is fast. By letting messages pile up and flushing them together, we amortize that cost across a whole batch. The workers also release their lock before actually calling write so the main loop doesn't stall.
+
+There were a couple more details we accounted for. xv6 has a tiny limit on open files, so when a client dies we hang onto its file descriptor in case another process wants to log to the same file, otherwise our benchmark would blow through the limit and take the daemon down with it. We also tracked when processes so we could clean up after them, which we did by cheaply probing whether the process still exists.
+
+## Benchmarks
+
+To measure everything, we wrote a harness that benchmarks twelve workload scenarios and tracked the numbers. Each scenario spins up some worker processes that do matrix multiplication work with some logging. This is an effort to simulate a real workload that logs rather than a program that only logs. Our benchmark sweeps across many variables including: client counts from one to eight, small and large messages, steady streams versus sudden bursts, and light loads all the way up to thousands of messages per client. We ran the workloads ten times against both vanilla xv6 and our version then averaged the results.
+
+One thing worth mentioning is that on the heaviest tests we actually had to reduce message counts down for vanilla because the synchronous logger couldn't drain fast enough and the kernel would crash. Our async version easily kept up with the full workload.
+
+![Throughput and average latency comparison across all 12 test scenarios.](/images/posts/async-logger-for-xv6/performance.png)
+
+*Figure 5. Throughput (left) and average log latency (right) for async vs vanilla across all 12 tests.*
+
+The throughput results split cleanly by how hard we pushed. The lighter tests show almost no difference between the two versions which makes sense. But when we increase client count and message volume, async becomes the clear winner. Vanilla can't keep up while async keeps climbing. On the burst tests, vanilla performs poorly because every writer piles up waiting on the disk. Async fires the whole burst into the ring and lets the daemon catch up afterward. On the heaviest scenarios we saw up to ~5x the throughput.
+
+The latency chart on the right is the culmination of our work. Async log latency stays almost perfectly flat no matter how much we log because from the application's POV, a log is just an atomic operation. Vanilla xv6, on the other hand, performs a disk write every single time, so its latency is an order of magnitude higher and barely changes with the workload.
